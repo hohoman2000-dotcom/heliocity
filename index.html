@@ -1,0 +1,1381 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>자산 리밸런서</title>
+  <meta name="theme-color" content="#256abf">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="리밸런서">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <style>
+/* 팔레트: dataviz 레퍼런스 팔레트 (라이트/다크 각각 검증 완료) */
+:root {
+  color-scheme: light dark;
+  --page: #f9f9f7; --surface: #fcfcfb;
+  --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11, 11, 11, .10);
+  --accent: #256abf; --accent-wash: rgba(37, 106, 191, .10); --btn: #256abf;
+  --warn: #fab219; --warn-wash: rgba(250, 178, 25, .18);
+  --crit: #d03b3b; --crit-wash: rgba(208, 59, 59, .10);
+  --s0: #2a78d6; --s1: #eb6834; --s2: #1baf7a; --s3: #eda100;
+  --s4: #e87ba4; --s5: #008300; --s6: #6250d6; --s7: #e34948;
+  --cash: #a9a8a0;
+  --font: system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d; --surface: #1a1a19;
+    --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255, 255, 255, .10);
+    --accent: #3987e5; --accent-wash: rgba(57, 135, 229, .16);
+    --warn-wash: rgba(250, 178, 25, .16); --crit-wash: rgba(208, 59, 59, .20);
+    --s0: #3987e5; --s1: #d95926; --s2: #199e70; --s3: #c98500;
+    --s4: #d55181; --s5: #008300; --s6: #9085e9; --s7: #e66767;
+    --cash: #6b6a64;
+  }
+}
+
+[hidden] { display: none !important; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--page); color: var(--ink); font: 15px/1.45 var(--font);
+  padding-bottom: calc(68px + env(safe-area-inset-bottom));
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+input, select { font: inherit; color: inherit; }
+
+/* ---------- 상단·하단 바 ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
+  padding: calc(8px + env(safe-area-inset-top)) 16px 8px; background: var(--page);
+  border-bottom: 1px solid var(--grid);
+}
+.topbar h1 { margin: 0; font-size: 19px; font-weight: 650; }
+.icon-btn { width: 44px; height: 44px; margin-right: -10px; border: 0; background: none; display: grid; place-items: center; border-radius: 12px; }
+.icon-btn svg, .tabbar svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn:active { background: var(--accent-wash); }
+
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; background: var(--surface);
+  border-top: 1px solid var(--grid); padding-bottom: env(safe-area-inset-bottom);
+}
+.tabbar button { flex: 1; border: 0; background: none; padding: 8px 0 7px; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--ink2); font-size: 11.5px; }
+.tabbar button.on { color: var(--accent); font-weight: 650; }
+
+main { max-width: 640px; margin: 0 auto; padding: 14px 14px 24px; }
+
+/* ---------- 카드·텍스트 ---------- */
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 650; }
+.sub, small, .hint { color: var(--ink2); font-size: 12.5px; }
+.hint { margin: 8px 0 0; }
+.lbl { color: var(--ink2); font-size: 12.5px; }
+.hero { font-size: clamp(34px, 11vw, 48px); font-weight: 700; line-height: 1.1; letter-spacing: -.01em; margin: 2px 0 4px; }
+.hero-card { padding-top: 16px; }
+.num { font-variant-numeric: tabular-nums; }
+
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 10px 11px; min-width: 0; }
+.tile .v { font-size: 16px; font-weight: 650; margin-top: 2px; overflow-wrap: anywhere; }
+.tile .s { color: var(--ink2); font-size: 12px; }
+
+.note { display: flex; gap: 8px; padding: 10px 12px; border-radius: 12px; margin-bottom: 10px; font-size: 13.5px; }
+.note.warn { background: var(--warn-wash); }
+.note.err { background: var(--crit-wash); }
+.note.info { background: var(--accent-wash); }
+.note .ico { flex: none; font-weight: 700; }
+
+/* ---------- 입력·버튼 ---------- */
+.field { display: block; margin-bottom: 10px; }
+.field > span { display: block; color: var(--ink2); font-size: 12.5px; margin-bottom: 4px; }
+.field input, .field select {
+  width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--axis); border-radius: 10px;
+  background: var(--page); font-size: 16px; /* 16px 미만이면 iOS가 확대함 */
+}
+.field input:focus, .field select:focus, .cell-in:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--axis); background: var(--surface); font-weight: 600; }
+.btn.primary { background: var(--btn); border-color: var(--btn); color: #fff; }
+.btn.danger { color: var(--crit); border-color: var(--crit); }
+.btn.block { width: 100%; margin-top: 8px; }
+.btn:disabled { opacity: .45; }
+.btn:active:not(:disabled) { filter: brightness(.94); }
+.link { border: 0; background: none; color: var(--accent); font-weight: 600; padding: 8px 4px; min-height: 36px; }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
+.switch input { width: 22px; height: 22px; accent-color: var(--accent); }
+.cell-in { width: 100%; min-height: 40px; padding: 6px 10px; border: 1px solid var(--axis); border-radius: 10px; background: var(--page); font-size: 16px; text-align: right; }
+
+/* ---------- 차트 ---------- */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 10px; color: var(--ink2); font-size: 12.5px; }
+.legend .k { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 10px; height: 10px; border-radius: 3px; background: var(--c, var(--s0)); flex: none; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c, var(--s0)); flex: none; }
+.tickkey { width: 2px; height: 14px; background: var(--ink); flex: none; }
+
+.bar-row { display: grid; grid-template-columns: 76px 1fr 78px; align-items: center; gap: 8px; padding: 6px 0; cursor: default; }
+.bar-label { display: flex; align-items: center; gap: 6px; font-size: 13px; min-width: 0; }
+.bar-label span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { position: relative; height: 24px; border-left: 1px solid var(--axis); background:
+  linear-gradient(to right, var(--grid) 1px, transparent 1px) 0 0 / 25% 100%; }
+.bar { position: absolute; left: 0; top: 6px; height: 12px; border-radius: 0 4px 4px 0; background: var(--c); min-width: 1px; }
+.tick { position: absolute; top: 1px; width: 2px; height: 22px; margin-left: -1px; background: var(--ink); border-radius: 1px; }
+.bar-val { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; }
+.bar-val small { display: block; }
+
+
+
+
+#tip {
+  position: fixed; z-index: 60; max-width: 260px; padding: 8px 10px; border-radius: 10px; font-size: 12.5px; line-height: 1.4;
+  background: var(--ink); color: var(--page); pointer-events: none; box-shadow: 0 4px 16px rgba(0, 0, 0, .25);
+}
+
+/* ---------- 자산군·종목 ---------- */
+.g-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.g-head b { font-size: 16px; white-space: nowrap; }
+.g-head .w { margin-left: auto; text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; white-space: nowrap; }
+.g-head .w small { font-weight: 400; }
+.badge { white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--warn-wash); }
+.g-sub { margin: 6px 0 2px; color: var(--ink2); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.h-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.h-row { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--grid); }
+.h-name { font-weight: 600; overflow-wrap: anywhere; }
+.h-sub { color: var(--ink2); font-size: 12.5px; }
+.h-act { text-align: right; flex: none; }
+.h-amt { font-size: 12.5px; color: var(--ink2); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 650; border: 1px solid var(--axis); white-space: nowrap; }
+.pill.buy { background: var(--accent-wash); border-color: var(--accent); }
+.pill.sell { background: var(--warn-wash); border-color: var(--warn); }
+.pill.hold { color: var(--ink2); font-weight: 500; }
+.tag { display: inline-block; padding: 0 7px; border-radius: 6px; font-size: 11.5px; border: 1px solid var(--axis); color: var(--ink2); margin-left: 4px; vertical-align: 1px; }
+
+.hc-top { display: flex; align-items: center; justify-content: space-between; }
+.hc-top b { font-size: 16px; }
+.hc-grid { display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 10px; margin-top: 10px; align-items: end; }
+.hc-grid .c > span { display: block; color: var(--ink2); font-size: 12px; }
+.hc-grid .c > b { display: block; font-variant-numeric: tabular-nums; }
+
+.tg-row { display: grid; grid-template-columns: 1fr 96px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--grid); }
+.sumline { margin-top: 8px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+
+
+.empty { text-align: center; color: var(--ink2); padding: 22px 8px; }
+.steps { margin: 6px 0 0; padding-left: 20px; }
+.steps li { margin: 3px 0; }
+
+/* ---------- 시트(모달)·토스트 ---------- */
+.backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .45); display: flex; align-items: flex-end; justify-content: center; }
+.sheet {
+  width: 100%; max-width: 640px; max-height: 92dvh; overflow: auto; background: var(--surface); border-radius: 18px 18px 0 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); animation: up .18s ease-out;
+}
+@keyframes up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+.sheet h2 { margin: 0 0 12px; font-size: 17px; }
+.form-err { color: var(--crit); font-size: 13px; min-height: 18px; margin: 0 0 4px; }
+.sheet-actions { display: flex; gap: 8px; margin-top: 6px; }
+.sheet-actions .btn { flex: 1; }
+.menu-btn { display: block; width: 100%; text-align: left; padding: 12px 14px; margin-bottom: 8px; min-height: 48px; border: 1px solid var(--ring); border-radius: 12px; background: var(--page); }
+.menu-btn small { display: block; }
+
+#toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(80px + env(safe-area-inset-bottom)); z-index: 70;
+  max-width: calc(100% - 28px); padding: 10px 14px; border-radius: 12px; background: var(--ink); color: var(--page);
+  font-size: 14px; display: flex; gap: 12px; align-items: center;
+}
+#toast button { border: 0; background: none; color: inherit; font-weight: 700; text-decoration: underline; padding: 4px; }
+
+@media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
+@media (forced-colors: active) { .bar { forced-color-adjust: none; outline: 1px solid CanvasText; } }
+
+/* ---------- 표 보기 ---------- */
+details.card summary { cursor: pointer; font-weight: 650; min-height: 24px; }
+.tbl-wrap { overflow-x: auto; margin-top: 10px; }
+.tbl { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.tbl th, .tbl td { padding: 6px 8px; text-align: right; border-top: 1px solid var(--grid); white-space: nowrap; }
+.tbl thead th { color: var(--ink2); font-weight: 600; border-top: 0; }
+.tbl th:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); }
+.tbl tr.g th, .tbl tr.g td { font-weight: 650; background: var(--accent-wash); }
+.tbl th.in { font-weight: 400; padding-left: 18px; }
+
+/* ---------- 도넛 차트 ---------- */
+.donuts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.donut { margin: 0; }
+.donut svg { display: block; width: 100%; height: auto; }
+.donut path, .donut circle { fill: none; stroke-width: 18; }
+.donut path:hover, .donut circle:hover { opacity: .85; }
+.donut text { fill: var(--ink); font: 600 13px var(--font); }
+.why { margin-top: 2px; }
+@media (forced-colors: active) { .donut path, .donut circle { forced-color-adjust: none; } }
+
+/* ---------- 환율 자동 조회 줄 ---------- */
+.fxline { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: -2px; }
+.fxline .hint { margin: 0; }
+
+/* ---------- 계좌 전환 ---------- */
+.topbar { flex-wrap: wrap; }
+.acctbar { flex: 0 0 100%; display: flex; gap: 6px; padding: 6px 0 2px; overflow-x: auto; }
+.chip { min-height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--axis); background: var(--surface); font-weight: 600; font-size: 14px; white-space: nowrap; }
+.chip.on { background: var(--btn); border-color: var(--btn); color: #fff; }
+
+/* ---------- 전체(합산) 화면 ---------- */
+.donut-row { display: flex; align-items: center; gap: 14px; }
+.donut-row .donut { flex: 0 0 42%; max-width: 170px; }
+.dl { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0; }
+.dl li { display: grid; grid-template-columns: 10px 1fr auto; gap: 0 8px; align-items: center; padding: 6px 0; font-size: 13.5px; }
+.dl .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl small { grid-column: 2 / 4; color: var(--ink2); font-size: 12px; }
+
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <h1 id="title">리밸런싱</h1>
+    <button class="icon-btn" data-act="open-settings" aria-label="설정 및 백업">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+    <nav class="acctbar" id="acctbar" aria-label="계좌 선택"></nav>
+  </header>
+
+  <main id="view" aria-live="polite"></main>
+
+  <nav class="tabbar" aria-label="메뉴">
+    <button data-tab="rebalance" class="on">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6.4 6.4"/></svg><span>리밸런싱</span>
+    </button>
+    <button data-tab="holdings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>보유</span>
+    </button>
+    <button data-tab="targets">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg><span>목표</span>
+    </button>
+
+  </nav>
+
+  <div id="sheet-root"></div>
+  <div id="tip" role="tooltip" hidden></div>
+  <div id="toast" hidden></div>
+  <input type="file" id="file-in" accept="application/json,.json" hidden>
+
+  <script>
+/* 자산 리밸런싱 계산 로직 (화면과 분리 - Node 테스트와 브라우저에서 같이 사용) */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.Core = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const EPS = 0.005;
+  const num = (v) => {
+    const n = typeof v === 'number' ? v : parseFloat(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const roundHalfAway = (x) => Math.sign(x) * Math.round(Math.abs(x));
+
+  /* ---------- 기본 데이터 ---------- */
+
+  function defaultState() {
+    return {
+      version: 1,
+      kind: '', // 'pension'(개인연금) | 'irp' | ''
+      settings: { fxRate: 1400, fxUpdated: '', tolerance: 5, extraCash: 0, skipWithinBand: false, riskLimit: 70, lastBackup: null },
+      cash: 0,
+      groups: [
+        { id: 'g-us', name: '미국주식', target: 50, colorSlot: 0, isCash: false },
+        { id: 'g-kr', name: '국내주식', target: 30, colorSlot: 1, isCash: false },
+        { id: 'g-bond', name: '채권', target: 10, colorSlot: 2, isCash: false },
+        { id: 'g-cash', name: '현금', target: 10, colorSlot: -1, isCash: true },
+      ],
+      holdings: [],
+    };
+  }
+
+  function sampleState() {
+    const s = defaultState();
+    s.settings.fxRate = 1380;
+    s.settings.extraCash = 3000000;
+    s.cash = 1500000;
+    s.holdings = [
+      { id: 'h1', name: '미국 S&P500 ETF(예시)', ticker: '', groupId: 'g-us', currency: 'USD', qty: 12, avgPrice: 480, price: 520, targetInGroup: 60 },
+      { id: 'h2', name: '미국 나스닥 ETF(예시)', ticker: '', groupId: 'g-us', currency: 'USD', qty: 20, avgPrice: 190, price: 215, targetInGroup: 40 },
+      { id: 'h3', name: '국내 대형주(예시)', ticker: '', groupId: 'g-kr', currency: 'KRW', qty: 40, avgPrice: 65000, price: 70000, targetInGroup: 50 },
+      { id: 'h4', name: '코스피200 ETF(예시)', ticker: '', groupId: 'g-kr', currency: 'KRW', qty: 60, avgPrice: 34000, price: 36500, targetInGroup: 50 },
+      { id: 'h5', name: '미국채 ETF(예시)', ticker: '', groupId: 'g-bond', currency: 'KRW', qty: 150, avgPrice: 12000, price: 11800, targetInGroup: 100, risk: 'safe' },
+    ];
+    return s;
+  }
+
+  /* 가져오기·불러오기 시 형식 보정. 형식이 맞지 않으면 null */
+  function normalizeState(obj) {
+    if (!obj || typeof obj !== 'object' || !Array.isArray(obj.groups) || !Array.isArray(obj.holdings)) return null;
+    const d = defaultState();
+    const st = obj.settings || {};
+    const out = {
+      version: 1,
+      kind: obj.kind === 'irp' ? 'irp' : obj.kind === 'pension' ? 'pension' : '',
+      settings: {
+        fxRate: num(st.fxRate) || d.settings.fxRate,
+        fxUpdated: String(st.fxUpdated || ''),
+        tolerance: st.tolerance === undefined ? d.settings.tolerance : num(st.tolerance),
+        extraCash: num(st.extraCash),
+        skipWithinBand: !!st.skipWithinBand,
+        riskLimit: st.riskLimit === undefined ? d.settings.riskLimit : num(st.riskLimit),
+        lastBackup: st.lastBackup || null,
+      },
+      cash: num(obj.cash),
+      groups: obj.groups.map((g, i) => ({
+        id: String(g.id || uid()),
+        name: String(g.name || '자산군'),
+        target: num(g.target),
+        colorSlot: g.isCash ? -1 : Number.isInteger(g.colorSlot) ? g.colorSlot : i % 8,
+        isCash: !!g.isCash,
+      })),
+      holdings: obj.holdings.map((h) => ({
+        id: String(h.id || uid()),
+        name: String(h.name || '종목'),
+        ticker: String(h.ticker || ''),
+        groupId: String(h.groupId || ''),
+        currency: h.currency === 'USD' ? 'USD' : 'KRW',
+        qty: num(h.qty),
+        avgPrice: num(h.avgPrice),
+        price: num(h.price),
+        targetInGroup: num(h.targetInGroup),
+        risk: h.risk === 'safe' ? 'safe' : 'risk',
+      })),
+    };
+    // 현금 자산군은 항상 정확히 1개
+    const cashGroups = out.groups.filter((g) => g.isCash);
+    if (cashGroups.length === 0) out.groups.push({ id: 'g-cash', name: '현금', target: 0, colorSlot: -1, isCash: true });
+    else cashGroups.slice(1).forEach((g) => (g.isCash = false));
+    return out;
+  }
+
+  /* ---------- 평가·손익 ---------- */
+
+  const toKRW = (amount, currency, fx) => (currency === 'USD' ? amount * fx : amount);
+
+  function portfolioSummary(state) {
+    const fx = num(state.settings.fxRate);
+    let value = 0;
+    let cost = 0;
+    const rows = state.holdings.map((h) => {
+      const v = toKRW(num(h.qty) * num(h.price), h.currency, fx);
+      const c = toKRW(num(h.qty) * num(h.avgPrice), h.currency, fx);
+      value += v;
+      cost += c;
+      const hasCost = num(h.avgPrice) > 0 && num(h.qty) > 0;
+      return {
+        id: h.id,
+        valueKRW: v,
+        costKRW: c,
+        pnlKRW: v - c,
+        pnlPct: hasCost ? (num(h.price) / num(h.avgPrice) - 1) * 100 : null, // 현지통화 기준 수익률
+      };
+    });
+    return {
+      rows,
+      holdingsValue: value,
+      holdingsCost: cost,
+      pnlKRW: value - cost,
+      pnlPct: cost > 0 ? (value / cost - 1) * 100 : null,
+      cash: num(state.cash),
+      totalAssets: value + num(state.cash),
+    };
+  }
+
+  /* ---------- 목표비중 검증 ---------- */
+
+  function validateTargets(state) {
+    const groupSum = state.groups.reduce((a, g) => a + num(g.target), 0);
+    const perGroup = {};
+    state.groups.forEach((g) => {
+      const hs = state.holdings.filter((h) => h.groupId === g.id);
+      const sum = hs.reduce((a, h) => a + num(h.targetInGroup), 0);
+      perGroup[g.id] = { count: hs.length, sum, ok: g.isCash || hs.length === 0 || Math.abs(sum - 100) < EPS };
+    });
+    return { groupSum, groupsOk: Math.abs(groupSum - 100) < EPS, perGroup };
+  }
+
+  /* ---------- 리밸런싱 ---------- */
+
+  function computeRebalance(state) {
+    const fx = num(state.settings.fxRate);
+    const extra = num(state.settings.extraCash);
+    const cash = num(state.cash);
+    const tol = num(state.settings.tolerance);
+    const skip = !!state.settings.skipWithinBand;
+    const warnings = [];
+    const groupById = new Map(state.groups.map((g) => [g.id, g]));
+    const validation = validateTargets(state);
+
+    const rows = state.holdings.map((h) => {
+      const priceKRW = num(h.price) * (h.currency === 'USD' ? fx : 1);
+      return { h, priceKRW, value: num(h.qty) * priceKRW };
+    });
+    const holdingsValue = rows.reduce((a, r) => a + r.value, 0);
+    const total = holdingsValue + cash + extra;
+
+    if (state.holdings.some((h) => h.currency === 'USD') && fx <= 0) warnings.push({ level: 'error', text: '환율이 입력되지 않았습니다.' });
+    if (total <= 0) warnings.push({ level: 'error', text: '전체 투자금이 0 이하입니다. 보유 종목과 현금을 입력해 주세요.' });
+    if (!validation.groupsOk) {
+      const gap = 100 - validation.groupSum;
+      warnings.push({ level: 'error', text: `자산군 목표비중 합계가 ${round2(validation.groupSum)}%입니다 (${gap > 0 ? gap + '% 부족' : -gap + '% 초과'}).` });
+    }
+
+    rows.forEach((r) => {
+      const { h } = r;
+      const g = groupById.get(h.groupId);
+      r.groupId = h.groupId;
+      r.targetW = g ? (num(g.target) * num(h.targetInGroup)) / 100 : 0;
+      r.targetAmt = (total * r.targetW) / 100;
+      r.curW = total > 0 ? (r.value / total) * 100 : 0;
+      r.diff = r.curW - r.targetW;
+      r.outOfBand = Math.abs(r.diff) > tol + 1e-9;
+      if (!g) warnings.push({ level: 'warn', text: `'${h.name}'의 자산군이 없어 목표비중 0%로 계산했습니다.` });
+      if (r.priceKRW <= 0) warnings.push({ level: 'warn', text: `'${h.name}'의 현재가가 0이라 매매 수량을 계산할 수 없습니다.` });
+      let q = 0;
+      if (r.priceKRW > 0 && !(skip && !r.outOfBand)) {
+        q = roundHalfAway((r.targetAmt - r.value) / r.priceKRW);
+        q = Math.max(q, -num(h.qty)); // 보유 수량 이상 매도 불가
+      }
+      r.tradeQty = q;
+    });
+
+    const cashAfterOf = () => cash + extra - rows.reduce((a, r) => a + r.tradeQty * r.priceKRW, 0);
+
+    // 반올림 때문에 현금이 모자라면, 목표 대비 가장 많이 초과 매수되는 종목부터 1주씩 줄인다
+    let cashAfter = cashAfterOf();
+    while (cashAfter < -0.5) {
+      let pick = null;
+      let pickOver = -Infinity;
+      rows.forEach((r) => {
+        if (r.tradeQty <= 0) return;
+        const over = r.value + r.tradeQty * r.priceKRW - r.targetAmt;
+        if (over > pickOver) { pickOver = over; pick = r; }
+      });
+      if (!pick) break;
+      pick.tradeQty -= 1;
+      cashAfter = cashAfterOf();
+    }
+    if (cashAfter < -0.5) warnings.push({ level: 'error', text: '현금이 부족합니다. 현금 또는 추가 투자금을 확인해 주세요.' });
+
+    let buyTotal = 0;
+    let sellTotal = 0;
+    rows.forEach((r) => {
+      r.tradeAmt = r.tradeQty * r.priceKRW;
+      r.postQty = num(r.h.qty) + r.tradeQty;
+      r.postValue = r.value + r.tradeAmt;
+      r.postW = total > 0 ? (r.postValue / total) * 100 : 0;
+      r.action = r.tradeQty > 0 ? 'buy' : r.tradeQty < 0 ? 'sell' : 'hold';
+      if (r.tradeAmt > 0) buyTotal += r.tradeAmt;
+      else sellTotal += -r.tradeAmt;
+    });
+
+    const groups = state.groups.map((g) => {
+      const hs = rows.filter((r) => r.groupId === g.id);
+      const v = validation.perGroup[g.id];
+      const targetAmt = (total * num(g.target)) / 100;
+      const currentValue = g.isCash ? cash + extra : hs.reduce((a, r) => a + r.value, 0);
+      const postValue = g.isCash ? cashAfter : hs.reduce((a, r) => a + r.postValue, 0);
+      const curW = total > 0 ? (currentValue / total) * 100 : 0;
+      const diff = curW - num(g.target);
+      if (!g.isCash && v.count > 0 && !v.ok) warnings.push({ level: 'warn', text: `'${g.name}' 안의 종목 목표비중 합계가 ${round2(v.sum)}%입니다 (100%가 아니면 나머지는 현금으로 남습니다).` });
+      if (!g.isCash && v.count === 0 && num(g.target) > 0) warnings.push({ level: 'warn', text: `'${g.name}'에 등록된 종목이 없어 목표 금액이 현금으로 남습니다.` });
+      return {
+        ...g,
+        targetAmt,
+        currentValue,
+        curW,
+        diff,
+        outOfBand: Math.abs(diff) > tol + 1e-9,
+        postValue,
+        postW: total > 0 ? (postValue / total) * 100 : 0,
+        rows: hs,
+      };
+    });
+
+    // 매도 이유 설명과 안내 (오류처럼 보이지 않도록)
+    const cashGroup = groups.find((g) => g.isCash);
+    const cashShort = !!cashGroup && cashGroup.currentValue < cashGroup.targetAmt - 0.5;
+    groups.forEach((g) => {
+      if (g.isCash) return;
+      g.rows.forEach((x) => {
+        if (num(g.target) > 0 && num(x.h.targetInGroup) === 0 && !(g.rows.length === 0)) {
+          warnings.push({ level: 'warn', text: `'${x.h.name}'의 자산군 내 목표비중이 0%입니다. 이 종목은 전량 매도 대상으로 계산됩니다.` });
+        }
+        if (x.tradeQty >= 0) return;
+        if (x.targetW === 0) x.reason = '목표비중이 0%라서 전량 매도로 계산됩니다. 목표 탭에서 비중을 확인하세요.';
+        else if (g.currentValue > g.targetAmt + 0.5) x.reason = `'${g.name}' 자산군이 목표(${round2(num(g.target))}%)보다 커서 줄입니다${cashShort ? ' (현금 목표 확보 포함)' : ''}.`;
+        else x.reason = `'${g.name}' 안에서 이 종목이 목표보다 큽니다.`;
+      });
+    });
+    if (cashShort && rows.some((x) => x.tradeQty < 0)) {
+      warnings.push({ level: 'info', text: `보유 현금이 현금 목표(${round2(num(cashGroup.target))}%)보다 적어서, 주식 일부를 매도해 현금을 확보하는 계산입니다. 현금을 따로 두지 않으려면 목표 탭에서 현금 목표를 0%로 바꾸세요.` });
+    }
+
+    // IRP 위험자산 한도: 안전자산으로 표시한 종목과 현금은 안전자산, 나머지는 위험자산. 한도 초과는 경고만 하고 계산은 막지 않는다
+    let risk = null;
+    if (state.kind === 'irp' && total > 0) {
+      const limit = num(state.settings.riskLimit) || 70;
+      let curRisk = 0;
+      let postRisk = 0;
+      rows.forEach((x) => { if (x.h.risk !== 'safe') { curRisk += x.value; postRisk += x.postValue; } });
+      risk = { limit, curPct: (curRisk / total) * 100, postPct: (postRisk / total) * 100 };
+      risk.over = risk.postPct > limit + 1e-9;
+      if (risk.over) warnings.push({ level: 'warn', text: `위험자산 비중이 매매 후 ${round2(risk.postPct)}%로 한도(${round2(limit)}%)를 넘습니다. 안전자산(채권·예금 등) 비중을 높이거나 위험자산 목표를 낮추세요.` });
+    }
+
+    return {
+      fx, tol, total, holdingsValue, cash, extra,
+      groups, rows, risk,
+      buyTotal, sellTotal, cashAfter,
+      cashAfterW: total > 0 ? (cashAfter / total) * 100 : 0,
+      warnings,
+      blocking: warnings.some((w) => w.level === 'error'),
+    };
+  }
+
+  const round2 = (x) => Math.round(x * 100) / 100;
+
+  /* 계산 결과대로 매매를 마쳤다고 보고 보유 수량·평단가·현금을 갱신한 새 상태를 돌려준다 */
+  function applyRebalance(state, res) {
+    const s = JSON.parse(JSON.stringify(state));
+    res.rows.forEach((r) => {
+      const h = s.holdings.find((x) => x.id === r.h.id);
+      if (!h || !r.tradeQty) return;
+      if (r.tradeQty > 0) {
+        const newQty = num(h.qty) + r.tradeQty;
+        h.avgPrice = (num(h.qty) * num(h.avgPrice) + r.tradeQty * num(h.price)) / newQty; // 현재가로 매수한 것으로 가정
+        h.qty = newQty;
+      } else {
+        h.qty = Math.max(0, num(h.qty) + r.tradeQty);
+      }
+    });
+    s.cash = Math.max(0, Math.round(res.cashAfter));
+    s.settings.extraCash = 0;
+    return s;
+  }
+
+
+  /* ---------- 계좌 (개인연금 · IRP) ---------- */
+
+  function newAccount(name, kind) {
+    const state = defaultState();
+    state.kind = kind;
+    return { id: 'a-' + kind, name, state };
+  }
+
+  function defaultRoot() {
+    const accounts = [newAccount('개인연금', 'pension'), newAccount('IRP', 'irp')];
+    return { version: 2, activeId: accounts[0].id, accounts };
+  }
+
+  /* 환율·환율 조회일·마지막 백업일은 모든 계좌가 같은 값을 쓴다 */
+  function syncShared(root, fromIdx) {
+    const src = root.accounts[fromIdx] || root.accounts[0];
+    root.accounts.forEach((a) => {
+      if (a === src) return;
+      a.state.settings.fxRate = src.state.settings.fxRate;
+      a.state.settings.fxUpdated = src.state.settings.fxUpdated;
+      a.state.settings.lastBackup = src.state.settings.lastBackup;
+    });
+    return root;
+  }
+
+  /* 저장값·백업 파일을 계좌 구조로 보정. 예전 형식(계좌 1개)은 개인연금으로 옮기고 IRP는 빈 상태로 둔다. 형식이 맞지 않으면 null */
+  function normalizeRoot(obj) {
+    if (!obj || typeof obj !== 'object') return null;
+    let accounts = [];
+    if (Array.isArray(obj.accounts)) {
+      obj.accounts.forEach((a, i) => {
+        const state = normalizeState(a && a.state);
+        if (!state) return;
+        if (!state.kind) state.kind = i === 1 ? 'irp' : 'pension';
+        accounts.push({
+          id: String((a && a.id) || 'a-' + state.kind),
+          name: String((a && a.name) || (state.kind === 'irp' ? 'IRP' : '개인연금')).slice(0, 20),
+          state,
+        });
+      });
+      if (!accounts.length) return null;
+    } else {
+      const state = normalizeState(obj);
+      if (!state) return null;
+      state.kind = 'pension';
+      accounts = [{ id: 'a-pension', name: '개인연금', state }];
+    }
+    ['pension', 'irp'].forEach((kind) => {
+      if (!accounts.some((a) => a.state.kind === kind)) accounts.push(newAccount(kind === 'irp' ? 'IRP' : '개인연금', kind));
+    });
+    const seen = new Set();
+    accounts.forEach((a) => { if (seen.has(a.id)) a.id = 'a-' + a.state.kind + '-' + uid(); seen.add(a.id); });
+    const activeId = accounts.some((a) => a.id === obj.activeId) ? obj.activeId : accounts[0].id;
+    return syncShared({ version: 2, activeId, accounts }, 0);
+  }
+
+  /* IRP 위험자산 현재 비중 (종목 평가 + 현금 기준). IRP가 아니면 null */
+  function riskInfo(state) {
+    if (state.kind !== 'irp') return null;
+    const fx = num(state.settings.fxRate);
+    const limit = num(state.settings.riskLimit) || 70;
+    let risky = 0;
+    let value = 0;
+    state.holdings.forEach((h) => {
+      const v = toKRW(num(h.qty) * num(h.price), h.currency, fx);
+      value += v;
+      if (h.risk !== 'safe') risky += v;
+    });
+    const total = value + num(state.cash);
+    const pct = total > 0 ? (risky / total) * 100 : 0;
+    return { limit, pct, over: pct > limit + 1e-9 };
+  }
+
+  /* 두 계좌를 합친 현황. 자산군은 이름이 같으면 하나로 합산하고 현금은 따로 모은다 */
+  function combineAccounts(root) {
+    let holdingsValue = 0;
+    let cost = 0;
+    let cash = 0;
+    const groupMap = new Map();
+    const accounts = root.accounts.map((a) => {
+      const st = a.state;
+      const sm = portfolioSummary(st);
+      const fx = num(st.settings.fxRate);
+      holdingsValue += sm.holdingsValue;
+      cost += sm.holdingsCost;
+      cash += sm.cash;
+      let inGroups = 0;
+      st.groups.forEach((g) => {
+        const key = g.isCash ? '현금' : String(g.name).trim();
+        const v = g.isCash
+          ? sm.cash
+          : st.holdings.filter((h) => h.groupId === g.id).reduce((s, h) => s + toKRW(num(h.qty) * num(h.price), h.currency, fx), 0);
+        if (!g.isCash) inGroups += v;
+        const cur = groupMap.get(key) || { name: key, isCash: !!g.isCash, value: 0 };
+        cur.value += v;
+        groupMap.set(key, cur);
+      });
+      const orphan = sm.holdingsValue - inGroups; // 자산군이 없어진 종목
+      if (orphan > 0.5) {
+        const cur = groupMap.get('기타') || { name: '기타', isCash: false, value: 0 };
+        cur.value += orphan;
+        groupMap.set('기타', cur);
+      }
+      return {
+        id: a.id, name: a.name, kind: st.kind,
+        total: sm.totalAssets, holdingsValue: sm.holdingsValue, cash: sm.cash,
+        pnlKRW: sm.pnlKRW, pnlPct: sm.pnlPct, risk: riskInfo(st),
+      };
+    });
+    const total = holdingsValue + cash;
+    accounts.forEach((a) => { a.share = total > 0 ? (a.total / total) * 100 : 0; });
+    const all = [...groupMap.values()].filter((g) => g.value > 0.5);
+    const stocks = all.filter((g) => !g.isCash);
+    const groups = stocks.concat(all.filter((g) => g.isCash)).map((g) => ({
+      ...g,
+      pct: total > 0 ? (g.value / total) * 100 : 0,
+      colorSlot: g.isCash ? -1 : stocks.indexOf(g) % 8,
+    }));
+    return {
+      total, holdingsValue, cash, cost,
+      pnlKRW: holdingsValue - cost,
+      pnlPct: cost > 0 ? (holdingsValue / cost - 1) * 100 : null,
+      accounts, groups,
+    };
+  }
+
+  return { num, uid, defaultState, sampleState, normalizeState, toKRW, portfolioSummary, validateTargets, computeRebalance, applyRebalance, defaultRoot, syncShared, normalizeRoot, riskInfo, combineAccounts };
+});
+
+</script>
+  <script>
+/* 자산 리밸런서 - 화면·저장·이벤트 (계산은 core.js) */
+(function () {
+  'use strict';
+
+  /* ================= 유틸 ================= */
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const N = Core.num;
+  const pn = (s) => N(String(s).replace(/[,\s₩$원%주]/g, ''));
+  const nf0 = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 });
+  const nf2 = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 2 });
+  const nf4 = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 4 });
+  const won = (n) => (n < -0.5 ? '−' : '') + '₩' + nf0.format(Math.abs(Math.round(n)));
+  const sgnWon = (n) => (n > 0.5 ? '+' : n < -0.5 ? '−' : '') + '₩' + nf0.format(Math.abs(Math.round(n)));
+  const pct = (n, d = 1) => (Math.round(n * 10 ** d) / 10 ** d).toFixed(d) + '%';
+  const sgnPct = (n, unit = '%') => (n > 0.049 ? '+' : n < -0.049 ? '−' : '') + (Math.round(Math.abs(n) * 10) / 10).toFixed(1) + unit;
+  const arrow = (n) => (n > 0.5 ? '▲ ' : n < -0.5 ? '▼ ' : '');
+  const qtyFmt = (q) => nf4.format(q);
+  const priceFmt = (h, v) => (h.currency === 'USD' ? '$' + nf2.format(v) : '₩' + nf0.format(v));
+  const find = (arr, id) => arr.find((x) => x.id === id);
+  const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const gc = (g) => (g && !g.isCash ? `var(--s${(g.colorSlot >= 0 ? g.colorSlot : 0) % 8})` : 'var(--cash)');
+
+  function compact(n) {
+    const a = Math.abs(n), s = n < -0.5 ? '−' : '';
+    if (a >= 1e8) return s + '₩' + (a / 1e8).toFixed(2).replace(/\.?0+$/, '') + '억';
+    if (a >= 1e4) {
+      const v = a / 1e4;
+      return s + '₩' + (v >= 100 ? nf0.format(Math.round(v)) : v.toFixed(1).replace(/\.0$/, '')) + '만';
+    }
+    return s + '₩' + nf0.format(Math.round(a));
+  }
+  const fmtIn = (v) => (N(v) ? nf4.format(N(v)) : '');
+
+
+  /* ================= 상태·저장 ================= */
+  const VERSION = '2026-11-09';
+  const DB = 'rebalancer', STORE = 'kv', KEY = 'state', LSKEY = 'rebalancer.state.v1';
+  let ROOT = Core.defaultRoot(); // 개인연금 · IRP 두 계좌
+  let S = ROOT.accounts[0].state; // 지금 보는 계좌의 상태 (ROOT 안의 같은 객체)
+  const ui = { tab: 'rebalance', scope: '', tableOpen: false };
+  const activeAcc = () => ROOT.accounts.find((a) => a.id === ROOT.activeId) || ROOT.accounts[0];
+  const syncShared = () => Core.syncShared(ROOT, ROOT.accounts.indexOf(activeAcc())); // 환율·백업일은 두 계좌 공통
+  function restoreRoot(root) { ROOT = root; S = activeAcc().state; ui.scope = ''; }
+  function replaceActive(state) { // 지금 계좌의 상태만 교체하고 계좌 종류·환율은 유지
+    const acc = activeAcc();
+    const old = acc.state;
+    state.kind = old.kind;
+    state.settings.fxRate = old.settings.fxRate;
+    state.settings.fxUpdated = old.settings.fxUpdated;
+    state.settings.lastBackup = old.settings.lastBackup;
+    acc.state = state;
+    S = state;
+  }
+  let undoSnap = null;
+  let pendingOk = null;
+  let saveT = null, renderT = null, toastT = null;
+
+  const idb = () => new Promise((res, rej) => {
+    if (!window.indexedDB) return rej(new Error('no idb'));
+    const r = indexedDB.open(DB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  const idbGet = async () => { const db = await idb(); return new Promise((res, rej) => { const q = db.transaction(STORE).objectStore(STORE).get(KEY); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); };
+  const idbSet = async (v) => { const db = await idb(); return new Promise((res, rej) => { const tx = db.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put(v, KEY); tx.oncomplete = () => res(); tx.onerror = tx.onabort = () => rej(tx.error); }); };
+
+  async function load() {
+    let raw = null;
+    try { raw = await idbGet(); } catch (e) { /* 아래 localStorage로 대체 */ }
+    if (!raw) { try { raw = JSON.parse(localStorage.getItem(LSKEY) || 'null'); } catch (e) { raw = null; } }
+    const n = Core.normalizeRoot(raw);
+    if (n) {
+      // 계좌 도입 전(계좌 1개) 형식이면 변환 전에 원본을 한 번 따로 보관한다
+      if (raw && !raw.accounts) { try { if (!localStorage.getItem(LSKEY + '.pre-accounts')) localStorage.setItem(LSKEY + '.pre-accounts', JSON.stringify(raw)); } catch (e) { /* 용량·권한 문제는 무시 */ } }
+      ROOT = n;
+      S = activeAcc().state;
+      if (raw && !raw.accounts) flush(); // 변환한 결과를 바로 저장해 저장소 형식을 새 구조로 맞춘다
+    }
+  }
+  const legacyBackup = () => { try { return localStorage.getItem(LSKEY + '.pre-accounts') || ''; } catch (e) { return ''; } };
+  function flush() {
+    clearTimeout(saveT);
+    const snap = JSON.parse(JSON.stringify(ROOT));
+    try { localStorage.setItem(LSKEY, JSON.stringify(snap)); } catch (e) { /* 용량·권한 문제는 무시 */ }
+    idbSet(snap).catch(() => {});
+  }
+  const save = () => { clearTimeout(saveT); saveT = setTimeout(flush, 120); };
+  const commit = () => { save(); render(); };
+
+  /* ================= 공통 컴포넌트 ================= */
+  const view = $('#view');
+  const sheetRoot = $('#sheet-root');
+  const tipEl = $('#tip');
+  const toastEl = $('#toast');
+
+  const note = (level, text) => `<div class="note ${level}"><span class="ico">${level === 'err' ? '⛔' : level === 'warn' ? '⚠' : 'ℹ'}</span><span>${text}</span></div>`;
+  const field = (label, inner) => `<label class="field"><span>${label}</span>${inner}</label>`;
+  const numInput = (bind, id, value, extra = '') => `<input class="cell-in" inputmode="decimal" autocomplete="off" data-bind="${bind}"${id ? ` data-id="${esc(id)}"` : ''} value="${esc(value)}" ${extra}>`;
+
+  function openSheet(html) {
+    sheetRoot.innerHTML = `<div class="backdrop"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
+    document.body.style.overflow = 'hidden';
+  }
+  function closeSheet() { sheetRoot.innerHTML = ''; document.body.style.overflow = ''; pendingOk = null; }
+  function confirmSheet({ title, msg, ok = '확인', danger = false, onOk }) {
+    pendingOk = onOk;
+    openSheet(`<h2>${esc(title)}</h2><p>${msg}</p><div class="sheet-actions"><button class="btn" data-act="close-sheet">취소</button><button class="btn ${danger ? 'danger' : 'primary'}" data-act="confirm-ok">${esc(ok)}</button></div>`);
+  }
+  function toast(msg, action) {
+    clearTimeout(toastT);
+    toastEl.innerHTML = `<span>${esc(msg)}</span>${action ? `<button data-act="undo">${esc(action)}</button>` : ''}`;
+    toastEl.hidden = false;
+    toastT = setTimeout(() => { toastEl.hidden = true; undoSnap = null; }, action ? 8000 : 2600);
+  }
+
+  /* 툴팁: 마우스는 올리면, 터치는 탭하면 */
+  function showTip(el) {
+    const text = el.getAttribute('data-tip');
+    if (!text) return;
+    tipEl.innerHTML = esc(text).replace(/\n/g, '<br>');
+    tipEl.hidden = false;
+    const r = el.getBoundingClientRect();
+    const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+    let top = r.top - h - 8;
+    if (top < 8) top = r.bottom + 8;
+    tipEl.style.left = left + 'px';
+    tipEl.style.top = top + 'px';
+  }
+  const hideTip = () => { tipEl.hidden = true; };
+
+  /* ================= 화면 1: 리밸런싱 ================= */
+  function barRow(label, color, cur, tgt, max, tip) {
+    return `<div class="bar-row" data-tip="${esc(tip)}" tabindex="0">
+      <div class="bar-label"><span class="dot" style="--c:${color}"></span><span>${esc(label)}</span></div>
+      <div class="bar-track"><div class="bar" style="--c:${color};width:${Math.min(100, (cur / max) * 100)}%"></div><div class="tick" style="left:${Math.min(100, (tgt / max) * 100)}%"></div></div>
+      <div class="bar-val">${pct(cur)}<small>목표 ${pct(tgt)}</small></div></div>`;
+  }
+
+  /* 도넛 차트: items = [{name, w, color}], 합계로 정규화. 조각 사이 2px 틈, 12시 방향부터 시계 방향 */
+  function donut(title, items) {
+    const list = items.filter((i) => i.w > 0.0001);
+    const sum = list.reduce((a, i) => a + i.w, 0);
+    const C = 60, R = 41, GAP = 2.6;
+    const pt = (deg) => [C + R * Math.sin((deg * Math.PI) / 180), C - R * Math.cos((deg * Math.PI) / 180)];
+    const share = (i) => (i.w / sum) * 100;
+    const label = `${title}: ` + (sum > 0 ? list.map((i) => `${i.name} ${pct(share(i))}`).join(', ') : '데이터 없음');
+    let body = '';
+    if (sum <= 0) body = `<circle cx="${C}" cy="${C}" r="${R}" style="stroke:var(--grid)"/>`;
+    else if (list.length === 1) body = `<circle cx="${C}" cy="${C}" r="${R}" style="stroke:${list[0].color}" data-tip="${esc(`${title} · ${list[0].name} ${pct(share(list[0]))}`)}"/>`;
+    else {
+      let a = 0;
+      list.forEach((i) => {
+        const span = (i.w / sum) * 360;
+        const trim = span > GAP * 2 ? GAP / 2 : 0;
+        const s = a + trim, e = a + span - trim;
+        const [x1, y1] = pt(s), [x2, y2] = pt(e);
+        body += `<path d="M${x1.toFixed(2)} ${y1.toFixed(2)} A${R} ${R} 0 ${e - s > 180 ? 1 : 0} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}" style="stroke:${i.color}" data-tip="${esc(`${title} · ${i.name} ${pct(share(i))}`)}"/>`;
+        a += span;
+      });
+    }
+    return `<figure class="donut"><svg viewBox="0 0 120 120" role="img" aria-label="${esc(label)}">${body}<text x="${C}" y="${C}" text-anchor="middle" dominant-baseline="central">${esc(title)}</text></svg></figure>`;
+  }
+
+  function riskBar(label, color, val, limit, tip) {
+    return `<div class="bar-row" data-tip="${esc(tip)}" tabindex="0">
+      <div class="bar-label"><span class="dot" style="--c:${color}"></span><span>${label}</span></div>
+      <div class="bar-track"><div class="bar" style="--c:${color};width:${Math.min(100, val)}%"></div><div class="tick" style="left:${Math.min(100, limit)}%"></div></div>
+      <div class="bar-val">${pct(val)}<small>한도 ${pct(limit, 0)}</small></div></div>`;
+  }
+
+  function tradeLabel(x) {
+    return x.tradeQty > 0 ? `매수 ${qtyFmt(x.tradeQty)}주` : x.tradeQty < 0 ? `매도 ${qtyFmt(-x.tradeQty)}주` : '유지';
+  }
+
+  function viewRebalance() {
+    if (!S.holdings.length && !S.cash) {
+      return `<div class="card hero-card"><h2>${esc(activeAcc().name)} 계좌가 비어 있어요</h2>
+        <p class="sub">① 목표 탭에서 자산군 목표비중을 정하고 ② 보유 탭에서 종목을 등록하면 ③ 이 화면에서 매수·매도 수량이 자동 계산됩니다.</p>
+        <button class="btn primary block" data-act="start-sample">예시 데이터로 먼저 체험해 보기</button>
+        <button class="btn block" data-act="start-empty">내 종목 직접 입력하기</button></div>`;
+    }
+    const r = Core.computeRebalance(S);
+    const sum = Core.portfolioSummary(S);
+    let h = '';
+
+    h += `<div class="card hero-card"><div class="lbl">전체 투자금 (보유 평가 + 현금 + 추가 투자금)</div>
+      <div class="hero num">${won(r.total)}</div>
+      <div class="sub">보유 ${compact(r.holdingsValue)} · 현금 ${compact(r.cash)} · 추가 ${compact(r.extra)}</div></div>`;
+
+    h += `<div class="card"><div class="row2">
+      ${field('추가 투자금 (원)', numInput('extra', '', fmtIn(S.settings.extraCash)))}
+      ${field('환율 (원/달러)', numInput('fx', '', fmtIn(S.settings.fxRate)))}
+    </div>${fxLine()}<p class="hint">현재가가 바뀌었다면 보유 탭에서 현재가를 먼저 수정하세요.</p></div>`;
+
+    if (S.holdings.length) {
+      if (!S.settings.lastBackup) h += note('info', '아직 백업한 적이 없습니다. 폰 분실에 대비해 설정(⚙)에서 백업 파일을 저장해 두세요.');
+      else if (Date.now() - Date.parse(S.settings.lastBackup) > 30 * 864e5) h += note('info', '백업한 지 30일이 넘었습니다. 설정(⚙)에서 백업 파일을 저장해 두세요.');
+    }
+    r.warnings.forEach((w) => { h += note(w.level === 'error' ? 'err' : w.level === 'info' ? 'info' : 'warn', esc(w.text)); });
+
+    /* IRP 위험자산 한도 */
+    if (r.risk) {
+      const k = r.risk;
+      h += `<div class="card"><h2>위험자산 비중 (한도 ${pct(k.limit, 0)})</h2>
+        <div class="legend"><span class="k"><span class="sw"></span>위험자산 비중</span><span class="k"><span class="tickkey"></span>한도</span></div>`
+        + riskBar('현재', 'var(--s0)', k.curPct, k.limit, `현재 위험자산 ${pct(k.curPct)} / 한도 ${pct(k.limit, 0)}`)
+        + riskBar('매매 후', k.over ? 'var(--crit)' : 'var(--s0)', k.postPct, k.limit, `매매 후 위험자산 ${pct(k.postPct)} / 한도 ${pct(k.limit, 0)}`)
+        + `<p class="hint">${k.over ? '⚠ 한도 초과: 매매 후 위험자산이 한도를 넘습니다.' : '✓ 한도 이내입니다.'} 종목의 위험/안전 구분은 보유 탭에서 바꿀 수 있고, 현금은 안전자산으로 계산합니다.</p></div>`;
+    }
+
+    /* 차트 1: 자산군 현재 vs 목표 */
+    const maxW = Math.max(10, Math.ceil(Math.max(...r.groups.map((g) => Math.max(g.curW, N(g.target)))) / 10) * 10);
+    h += `<div class="card"><h2>자산군 비중: 현재 vs 목표</h2>
+      <div class="legend"><span class="k"><span class="sw"></span>현재 비중</span><span class="k"><span class="tickkey"></span>목표 비중</span><span class="k">허용 편차 ±${pct(r.tol, 0)}p</span></div>`;
+    r.groups.forEach((g) => {
+      const tip = `${g.name}\n현재 ${pct(g.curW)} (${won(g.currentValue)})\n목표 ${pct(N(g.target))} (${won(g.targetAmt)})\n차이 ${sgnPct(g.diff, '%p')}`;
+      h += barRow(g.name, gc(g), g.curW, N(g.target), maxW, tip);
+    });
+    h += `</div>`;
+
+    /* 차트 2: 현재 / 목표 / 매매 후 구성 */
+    h += `<div class="card"><h2>구성 변화</h2><div class="legend">${r.groups.map((g) => `<span class="k"><span class="sw" style="--c:${gc(g)}"></span>${esc(g.name)}</span>`).join('')}</div>`;
+    const ring = (title, pick) => donut(title, r.groups.map((g) => ({ name: g.name, w: pick(g), color: gc(g) })));
+    h += `<div class="donuts">${ring('현재', (g) => g.curW)}${ring('목표', (g) => N(g.target))}${ring('매매 후', (g) => g.postW)}</div>`;
+    h += `</div>`;
+
+    /* 요약 */
+    h += `<div class="tiles">
+      <div class="tile"><div class="lbl">매수 합계</div><div class="v num">${compact(r.buyTotal)}</div></div>
+      <div class="tile"><div class="lbl">매도 합계</div><div class="v num">${compact(r.sellTotal)}</div></div>
+      <div class="tile"><div class="lbl">매매 후 현금</div><div class="v num">${compact(r.cashAfter)}</div><div class="s">${pct(r.cashAfterW)}</div></div></div>`;
+
+    /* 자산군별 카드 */
+    r.groups.forEach((g) => {
+      const adj = g.targetAmt - g.currentValue;
+      h += `<section class="card"><div class="g-head"><span class="dot" style="--c:${gc(g)}"></span><b>${esc(g.name)}</b>
+        ${g.outOfBand ? `<span class="badge">⚠ 편차 ${sgnPct(g.diff, '%p')}</span>` : ''}
+        <div class="w">${pct(g.curW)}<small> → 목표 ${pct(N(g.target))}</small></div></div>
+        <div class="g-sub"><span>현재 ${won(g.currentValue)}</span><span>목표 ${won(g.targetAmt)}</span><span>조정 필요 ${sgnWon(adj)}</span></div>`;
+      if (g.isCash) {
+        h += `<ul class="h-list"><li class="h-row"><div><div class="h-name">현금 (보유 현금 + 추가 투자금)</div><div class="h-sub">매매 후 ${pct(g.postW)}</div></div>
+          <div class="h-act"><span class="pill hold">매매 후 ${won(g.postValue)}</span></div></li></ul>`;
+      } else if (!g.rows.length) {
+        h += `<p class="hint">이 자산군에 등록된 종목이 없습니다. 보유 탭에서 종목을 추가하세요.</p>`;
+      } else {
+        h += `<ul class="h-list">`;
+        g.rows.forEach((x) => {
+          const cls = x.action;
+          h += `<li class="h-row" data-tip="${esc(`${x.h.name}\n현재 ${pct(x.curW)} → 목표 ${pct(x.targetW)}\n매매 후 ${pct(x.postW)}`)}">
+            <div><div class="h-name">${esc(x.h.name)}${x.h.currency === 'USD' ? '<span class="tag">USD</span>' : ''}</div>
+            <div class="h-sub">현재 ${pct(x.curW)} · 목표 ${pct(x.targetW)}</div>
+            <div class="h-sub">보유 ${qtyFmt(N(x.h.qty))}주 → ${qtyFmt(x.postQty)}주 · 매매 후 ${pct(x.postW)}</div>${x.reason ? `<div class="h-sub why">↳ ${esc(x.reason)}</div>` : ''}</div>
+            <div class="h-act"><span class="pill ${cls}">${tradeLabel(x)}</span><div class="h-amt">${x.tradeQty ? sgnWon(x.tradeAmt) : '조정 필요 ' + sgnWon(x.targetAmt - x.value)}</div></div></li>`;
+        });
+        h += `</ul>`;
+      }
+      h += `</section>`;
+    });
+
+    const hasTrade = r.rows.some((x) => x.tradeQty);
+    h += `<button class="btn primary block" data-act="apply" ${r.blocking || !hasTrade ? 'disabled' : ''}>이 계산대로 매매했어요 (보유 현황에 반영)</button>
+      <p class="hint">반영하면 수량·평단가(현재가 매수 가정)·현금이 갱신되고 추가 투자금은 0으로 초기화됩니다. 직후 되돌리기가 가능합니다.</p>`;
+
+    /* 표 보기 */
+    h += `<details class="card" id="tbl-det" ${ui.tableOpen ? 'open' : ''}><summary>표로 보기</summary><div class="tbl-wrap"><table class="tbl"><thead><tr>
+      <th>구분</th><th>현재%</th><th>목표%</th><th>현재금액</th><th>목표금액</th><th>조정 필요</th><th>수량</th><th>매매금액</th></tr></thead><tbody>`;
+    r.groups.forEach((g) => {
+      h += `<tr class="g"><th>${esc(g.name)}</th><td>${pct(g.curW)}</td><td>${pct(N(g.target))}</td><td>${won(g.currentValue)}</td><td>${won(g.targetAmt)}</td><td>${sgnWon(g.targetAmt - g.currentValue)}</td><td></td><td></td></tr>`;
+      if (!g.isCash) g.rows.forEach((x) => {
+        h += `<tr><th class="in">${esc(x.h.name)}</th><td>${pct(x.curW)}</td><td>${pct(x.targetW)}</td><td>${won(x.value)}</td><td>${won(x.targetAmt)}</td><td>${sgnWon(x.targetAmt - x.value)}</td><td>${tradeLabel(x)}</td><td>${sgnWon(x.tradeAmt)}</td></tr>`;
+      });
+    });
+    h += `</tbody></table></div></details>`;
+    return h;
+  }
+
+  /* ================= 화면: 전체 (두 계좌 합산) ================= */
+  function donutCard(title, center, items) {
+    const list = items.filter((i) => i.value > 0.5);
+    return `<div class="card"><h2>${title}</h2><div class="donut-row">${donut(center, list.map((i) => ({ name: i.name, w: i.value, color: i.color })))}
+      <ul class="dl">${list.map((i) => `<li><span class="dot" style="--c:${i.color}"></span><span class="nm">${esc(i.name)}</span><b class="num">${pct(i.pct)}</b><small>${compact(i.value)}</small></li>`).join('')}</ul></div></div>`;
+  }
+
+  function viewTotal() {
+    const c = Core.combineAccounts(ROOT);
+    if (c.total <= 0) return `<div class="card empty">아직 입력된 자산이 없습니다.<br>위에서 계좌를 선택해 종목과 현금을 입력하세요.</div>`;
+    const accColor = (i) => `var(--s${i % 8})`;
+    let h = `<div class="card hero-card"><div class="lbl">전체 총자산 (${c.accounts.map((a) => esc(a.name)).join(' + ')})</div>
+      <div class="hero num">${won(c.total)}</div>
+      <div class="sub">종목 ${compact(c.holdingsValue)} · 현금 ${compact(c.cash)}</div></div>
+      <div class="tiles">
+        <div class="tile"><div class="lbl">평가손익</div><div class="v num">${arrow(c.pnlKRW)}${compact(c.pnlKRW)}</div></div>
+        <div class="tile"><div class="lbl">수익률</div><div class="v num">${c.pnlPct == null ? '-' : sgnPct(c.pnlPct)}</div></div>
+        <div class="tile"><div class="lbl">현금 비중</div><div class="v num">${pct(c.total > 0 ? (c.cash / c.total) * 100 : 0)}</div></div></div>`;
+    h += donutCard('계좌별 비중', '계좌', c.accounts.map((a, i) => ({ name: a.name, value: a.total, pct: a.share, color: accColor(i) })));
+    h += donutCard('자산군별 합산 비중', '자산군', c.groups.map((g) => ({ name: g.name, value: g.value, pct: g.pct, color: g.isCash ? 'var(--cash)' : `var(--s${g.colorSlot})` })));
+    c.accounts.forEach((a, i) => {
+      h += `<section class="card"><div class="g-head"><span class="dot" style="--c:${accColor(i)}"></span><b>${esc(a.name)}</b>
+        <div class="w">${won(a.total)}<small> ${pct(a.share)}</small></div></div>
+        <div class="g-sub"><span>종목 ${compact(a.holdingsValue)}</span><span>현금 ${compact(a.cash)}</span><span>손익 ${sgnWon(a.pnlKRW)}${a.pnlPct == null ? '' : ' (' + sgnPct(a.pnlPct) + ')'}</span></div>`;
+      if (a.risk) h += `<div class="g-sub"><span>위험자산 ${pct(a.risk.pct)} / 한도 ${pct(a.risk.limit, 0)}</span>${a.risk.over ? '<span class="badge">⚠ 한도 초과</span>' : '<span>✓ 한도 이내</span>'}</div>`;
+      h += `<button class="btn block" data-act="acct" data-id="${esc(a.id)}">${esc(a.name)} 열기</button></section>`;
+    });
+    h += `<p class="hint">리밸런싱은 계좌별로 합니다. 위에서 계좌를 선택하세요. 환율은 두 계좌가 같은 값을 씁니다.</p>`;
+    return h;
+  }
+
+  /* ================= 화면 2: 보유 ================= */
+  function viewHoldings() {
+    const sum = Core.portfolioSummary(S);
+    let h = `<div class="card hero-card"><div class="lbl">총 자산 (보유 평가 + 현금)</div><div class="hero num">${won(sum.totalAssets)}</div></div>
+      <div class="tiles">
+        <div class="tile"><div class="lbl">종목 평가</div><div class="v num">${compact(sum.holdingsValue)}</div></div>
+        <div class="tile"><div class="lbl">평가손익</div><div class="v num">${arrow(sum.pnlKRW)}${compact(sum.pnlKRW)}</div></div>
+        <div class="tile"><div class="lbl">수익률</div><div class="v num">${sum.pnlPct == null ? '-' : sgnPct(sum.pnlPct)}</div></div></div>
+      <div class="card"><div class="row2">
+        ${field('환율 (원/달러)', numInput('fx', '', fmtIn(S.settings.fxRate)))}
+        ${field('보유 현금 (원)', numInput('cash', '', fmtIn(S.cash)))}
+      </div>${fxLine()}</div>`;
+
+    const order = new Map(S.groups.map((g, i) => [g.id, i]));
+    const list = [...S.holdings].sort((a, b) => (order.get(a.groupId) ?? 99) - (order.get(b.groupId) ?? 99));
+    if (!list.length) h += `<div class="card empty">등록된 종목이 없습니다.<br>아래 버튼으로 첫 종목을 추가하세요.</div>`;
+    list.forEach((x) => {
+      const g = find(S.groups, x.groupId);
+      const row = sum.rows.find((r) => r.id === x.id);
+      h += `<section class="card"><div class="hc-top"><span><span class="dot" style="--c:${gc(g)}"></span> <b>${esc(x.name)}</b>${x.currency === 'USD' ? '<span class="tag">USD</span>' : ''}${S.kind === 'irp' && x.risk === 'safe' ? '<span class="tag">안전자산</span>' : ''}</span>
+        <button class="link" data-act="edit-holding" data-id="${esc(x.id)}">수정</button></div>
+        <div class="h-sub">${esc(g ? g.name : '자산군 없음')} · 평가 ${won(row.valueKRW)} · 손익 ${sgnWon(row.pnlKRW)}${row.pnlPct == null ? '' : ' (' + sgnPct(row.pnlPct) + ')'}</div>
+        <div class="hc-grid">
+          <div class="c"><span>수량</span><b>${qtyFmt(N(x.qty))}주</b></div>
+          <div class="c"><span>평단가</span><b>${priceFmt(x, N(x.avgPrice))}</b></div>
+          <label class="c"><span>현재가 (${x.currency})</span>${numInput('price', x.id, fmtIn(x.price))}</label></div></section>`;
+    });
+    h += `<button class="btn primary block" data-act="add-holding">+ 종목 추가</button>`;
+    return h;
+  }
+
+  /* ================= 화면 3: 목표 ================= */
+  function viewTargets() {
+    const v = Core.validateTargets(S);
+    let h = `<div class="card"><h2>${esc(activeAcc().name)} · 자산군 목표비중</h2>`;
+    S.groups.forEach((g) => {
+      h += `<div class="tg-row"><button class="link" style="text-align:left;color:var(--ink);padding:0" data-act="edit-group" data-id="${esc(g.id)}"><span class="dot" style="--c:${gc(g)};display:inline-block;margin-right:8px"></span>${esc(g.name)}${g.isCash ? '<span class="tag">현금</span>' : ''}</button>
+        ${numInput('gtarget', g.id, g.target)}</div>`;
+    });
+    h += `<div class="sumline"><span>합계 ${pct(v.groupSum, 1)}</span>${v.groupsOk ? '<span class="badge" style="background:var(--accent-wash)">✓ 100%</span>' : `<span class="badge">⚠ ${v.groupSum < 100 ? pct(100 - v.groupSum) + ' 부족' : pct(v.groupSum - 100) + ' 초과'}</span>`}</div>
+      <button class="btn block" data-act="add-group">+ 자산군 추가</button></div>`;
+
+    S.groups.filter((g) => !g.isCash).forEach((g) => {
+      const hs = S.holdings.filter((x) => x.groupId === g.id);
+      if (!hs.length) return;
+      const pg = v.perGroup[g.id];
+      h += `<div class="card"><h2><span class="dot" style="--c:${gc(g)};display:inline-block;margin-right:8px"></span>${esc(g.name)} 안의 종목 비중 <span class="sub">(자산군 ${pct(N(g.target))})</span></h2>`;
+      hs.forEach((x) => {
+        h += `<div class="tg-row"><div><div class="h-name">${esc(x.name)}</div><div class="h-sub">전체 기준 ${pct((N(g.target) * N(x.targetInGroup)) / 100, 2)}</div></div>${numInput('htarget', x.id, x.targetInGroup)}</div>`;
+      });
+      h += `<div class="sumline"><span>합계 ${pct(pg.sum, 1)}</span>${pg.ok ? '<span class="badge" style="background:var(--accent-wash)">✓ 100%</span>' : '<span class="badge">⚠ 100%가 아님</span>'}</div></div>`;
+    });
+
+    h += `<div class="card"><h2>리밸런싱 기준</h2>
+      ${field('허용 편차 (%p) - 목표와 이 값 이상 벗어나면 강조', numInput('tol', '', S.settings.tolerance))}
+      ${S.kind === 'irp' ? field('위험자산 한도 (%) - 매매 후 이 값을 넘으면 경고', numInput('risklimit', '', S.settings.riskLimit)) : ''}
+      <label class="switch"><span>허용 편차 안의 종목은 매매하지 않기</span><input type="checkbox" data-bind="skip" ${S.settings.skipWithinBand ? 'checked' : ''}></label></div>`;
+    return h;
+  }
+
+  const VIEWS = { rebalance: viewRebalance, holdings: viewHoldings, targets: viewTargets };
+  const TITLES = { rebalance: '리밸런싱', holdings: '보유 현황', targets: '목표비중' };
+
+  function render() {
+    clearTimeout(renderT);
+    const y = window.scrollY;
+    const isAll = ui.scope === 'all';
+    $('#title').textContent = isAll ? '전체 현황' : TITLES[ui.tab];
+    $('#acctbar').innerHTML = ROOT.accounts.map((a) => {
+      const rk = Core.riskInfo(a.state);
+      const on = !isAll && a.id === ROOT.activeId;
+      return `<button class="chip${on ? ' on' : ''}" data-act="acct" data-id="${esc(a.id)}" aria-pressed="${on}">${esc(a.name)}${rk && rk.over ? ' ⚠' : ''}</button>`;
+    }).join('') + `<button class="chip${isAll ? ' on' : ''}" data-act="acct-all" aria-pressed="${isAll}">전체</button>`;
+    document.querySelectorAll('.tabbar button').forEach((b) => { const on = !isAll && b.dataset.tab === ui.tab; b.classList.toggle('on', on); b.setAttribute('aria-current', on ? 'page' : 'false'); });
+    view.innerHTML = isAll ? viewTotal() : VIEWS[ui.tab]();
+    window.scrollTo(0, y);
+    hideTip();
+  }
+  const scheduleRender = () => { clearTimeout(renderT); renderT = setTimeout(render, 250); };
+
+  /* ================= 시트: 종목·자산군·설정 ================= */
+  function holdingSheet(id) {
+    const x = id ? find(S.holdings, id) : null;
+    const stockGroups = S.groups.filter((g) => !g.isCash);
+    if (!stockGroups.length) return toast('자산군을 먼저 추가해 주세요');
+    const gid = x ? x.groupId : stockGroups[0].id;
+    const remain = (g) => Math.max(0, 100 - S.holdings.filter((q) => q.groupId === g).reduce((a, q) => a + N(q.targetInGroup), 0));
+    openSheet(`<h2>${x ? '종목 수정' : '종목 추가'}</h2>
+      ${field('종목명', `<input id="f-name" maxlength="40" autocomplete="off" value="${esc(x ? x.name : '')}" placeholder="예: TIGER 미국S&P500">`)}
+      <div class="row2">
+        ${field('자산군', `<select id="f-group">${stockGroups.map((g) => `<option value="${esc(g.id)}" ${g.id === gid ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select>`)}
+        ${field('통화', `<select id="f-cur"><option value="KRW" ${x && x.currency === 'KRW' || !x ? 'selected' : ''}>KRW (원)</option><option value="USD" ${x && x.currency === 'USD' ? 'selected' : ''}>USD (달러)</option></select>`)}
+      </div>
+      <div class="row2">
+        ${field('수량 (주)', `<input id="f-qty" inputmode="decimal" autocomplete="off" value="${x ? esc(x.qty) : ''}">`)}
+        ${field('평단가 (매입 통화)', `<input id="f-avg" inputmode="decimal" autocomplete="off" value="${x ? esc(x.avgPrice) : ''}">`)}
+      </div>
+      <div class="row2">
+        ${field('현재가 (매입 통화)', `<input id="f-price" inputmode="decimal" autocomplete="off" value="${x ? esc(x.price) : ''}">`)}
+        ${field('자산군 내 목표비중 (%)', `<input id="f-tgt" inputmode="decimal" autocomplete="off" value="${x ? esc(x.targetInGroup) : remain(gid)}">`)}
+      </div>
+      ${S.kind === 'irp' ? field('자산 구분 (IRP 위험자산 한도 계산용)', `<select id="f-risk"><option value="risk" ${!x || x.risk !== 'safe' ? 'selected' : ''}>위험자산 (주식·주식형 ETF 등)</option><option value="safe" ${x && x.risk === 'safe' ? 'selected' : ''}>안전자산 (채권·예금 등)</option></select>`) : ''}
+      <p class="form-err" id="f-err"></p>
+      <div class="sheet-actions">${x ? `<button class="btn danger" data-act="del-holding" data-id="${esc(x.id)}">삭제</button>` : ''}<button class="btn" data-act="close-sheet">취소</button><button class="btn primary" data-act="save-holding" data-id="${x ? esc(x.id) : ''}">저장</button></div>`);
+  }
+
+  function saveHolding(id) {
+    const name = $('#f-name').value.trim();
+    const qty = pn($('#f-qty').value), avg = pn($('#f-avg').value), price = pn($('#f-price').value), tgt = pn($('#f-tgt').value);
+    const err = (t) => { $('#f-err').textContent = t; };
+    if (!name) return err('종목명을 입력해 주세요.');
+    if (qty < 0 || avg < 0 || price < 0 || tgt < 0) return err('음수는 입력할 수 없습니다.');
+    if (tgt > 100) return err('자산군 내 목표비중은 100%를 넘을 수 없습니다.');
+    const data = { name, groupId: $('#f-group').value, currency: $('#f-cur').value, qty, avgPrice: avg, price: price || avg, targetInGroup: tgt, risk: $('#f-risk') ? $('#f-risk').value : (id ? find(S.holdings, id).risk : 'risk') };
+    if (id) Object.assign(find(S.holdings, id), data);
+    else S.holdings.push({ id: Core.uid(), ticker: '', ...data });
+    closeSheet(); commit();
+  }
+
+  function groupSheet(id) {
+    const g = id ? find(S.groups, id) : null;
+    openSheet(`<h2>${g ? '자산군 수정' : '자산군 추가'}</h2>
+      ${field('자산군 이름', `<input id="g-name" maxlength="20" autocomplete="off" value="${esc(g ? g.name : '')}" placeholder="예: 미국주식">`)}
+      ${field('목표비중 (%)', `<input id="g-tgt" inputmode="decimal" autocomplete="off" value="${g ? esc(g.target) : 0}">`)}
+      <p class="form-err" id="g-err"></p>
+      <div class="sheet-actions">${g && !g.isCash ? `<button class="btn danger" data-act="del-group" data-id="${esc(g.id)}">삭제</button>` : ''}<button class="btn" data-act="close-sheet">취소</button><button class="btn primary" data-act="save-group" data-id="${g ? esc(g.id) : ''}">저장</button></div>`);
+  }
+  function saveGroup(id) {
+    const name = $('#g-name').value.trim(), tgt = pn($('#g-tgt').value);
+    if (!name) return ($('#g-err').textContent = '이름을 입력해 주세요.');
+    if (tgt < 0 || tgt > 100) return ($('#g-err').textContent = '목표비중은 0~100% 사이여야 합니다.');
+    if (id) { const g = find(S.groups, id); g.name = name; g.target = tgt; }
+    else {
+      const used = new Set(S.groups.map((g) => g.colorSlot));
+      let slot = 0; while (used.has(slot) && slot < 8) slot++;
+      S.groups.splice(Math.max(0, S.groups.findIndex((g) => g.isCash)), 0, { id: Core.uid(), name, target: tgt, colorSlot: slot < 8 ? slot : S.groups.length % 8, isCash: false });
+    }
+    closeSheet(); commit();
+  }
+
+
+  function settingsSheet() {
+    const lb = S.settings.lastBackup ? new Date(S.settings.lastBackup).toLocaleDateString('ko-KR') : '없음';
+    openSheet(`<h2>설정 · 백업</h2>
+      <p class="sub">데이터는 이 기기의 브라우저에만 저장됩니다. 마지막 백업: <b>${esc(lb)}</b></p>
+      <h2 style="margin-top:14px">계좌 이름</h2>
+      <div class="row2">${ROOT.accounts.map((a) => field(a.state.kind === 'irp' ? 'IRP 계좌' : '개인연금 계좌', `<input class="cell-in" style="text-align:left" maxlength="20" autocomplete="off" data-bind="acctname" data-id="${esc(a.id)}" value="${esc(a.name)}">`)).join('')}</div>
+      <button class="menu-btn" data-act="export">백업 파일 저장<small class="sub">두 계좌가 JSON 파일 하나에 저장됩니다 · 폰 분실·기기 변경·와이프 공유에 사용</small></button>
+      <button class="menu-btn" data-act="import">백업 파일 불러오기<small class="sub">두 계좌의 현재 데이터를 모두 파일 내용으로 교체합니다</small></button>
+      <button class="menu-btn" data-act="sample">예시 데이터 불러오기 (${esc(activeAcc().name)})<small class="sub">이 계좌의 데이터만 예시로 교체됩니다</small></button>
+      <button class="menu-btn" data-act="net-check">시세 조회 점검<small class="sub">이 기기의 인터넷에서 무료 시세 서비스에 접속되는지 확인합니다</small></button>
+      ${legacyBackup() ? '<button class="menu-btn" data-act="export-old">계좌 도입 전 원본 내려받기<small class="sub">계좌 기능을 넣기 직전에 보관해 둔 예전 형식의 데이터입니다</small></button>' : ''}
+      <button class="menu-btn" data-act="reset" style="color:var(--crit)">모든 데이터 지우기 (두 계좌 모두)</button>
+      <h2 style="margin-top:16px">아이폰에 앱처럼 설치</h2>
+      <ol class="steps sub"><li>Safari로 이 페이지 주소를 엽니다 (https 주소 필요).</li><li>하단 공유 버튼(□↑) → <b>홈 화면에 추가</b>.</li><li>홈 화면의 아이콘으로 실행해야 데이터가 안전하게 유지됩니다.</li></ol>
+      <p class="hint">앱 버전 ${VERSION}</p>
+      <div class="sheet-actions"><button class="btn" data-act="close-sheet">닫기</button></div>`);
+  }
+
+  /* ================= 환율 자동 조회 · 시세 점검 */
+  const fxLine = () => `<div class="fxline"><button class="link" data-act="fetch-fx">환율 자동 조회</button><span class="hint">${S.settings.fxUpdated ? esc(S.settings.fxUpdated) + ' 조회값' : '직접 입력한 값'}</span></div>`;
+
+  async function timedFetch(url, ms = 8000) {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), ms);
+    try { return await fetch(url, { signal: c.signal, cache: 'no-store' }); } finally { clearTimeout(t); }
+  }
+
+  async function fetchFx() {
+    toast('환율 조회 중…');
+    try {
+      const res = await timedFetch('https://open.er-api.com/v6/latest/USD');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const j = await res.json();
+      const rate = N(j && j.rates && j.rates.KRW);
+      if (!(rate > 500 && rate < 5000)) throw new Error('비정상 값');
+      S.settings.fxRate = Math.round(rate * 100) / 100;
+      S.settings.fxUpdated = todayStr();
+      syncShared();
+      commit();
+      toast(`환율을 ${nf2.format(S.settings.fxRate)}원으로 갱신했어요`);
+    } catch (e) {
+      toast('환율 조회에 실패했어요. 직접 입력해 주세요');
+    }
+  }
+
+  const QUOTE_OK = (t) => /regularMarketPrice/.test(t);
+  const NET_TESTS = [
+    { name: '환율 (open.er-api.com)', url: 'https://open.er-api.com/v6/latest/USD', ok: (t) => /"KRW"/.test(t) },
+    { name: '미국 시세 · Yahoo (AAPL)', url: 'https://query1.finance.yahoo.com/v8/finance/chart/AAPL?range=1d&interval=1d', ok: QUOTE_OK },
+    { name: '국내 시세 · Yahoo (삼성전자 005930.KS)', url: 'https://query1.finance.yahoo.com/v8/finance/chart/005930.KS?range=1d&interval=1d', ok: QUOTE_OK },
+    { name: '미국 시세 · Stooq (AAPL)', url: 'https://stooq.com/q/l/?s=aapl.us&f=sd2t2c&h&e=csv', ok: (t) => /AAPL/i.test(t) && /\d/.test(t.split('\n')[1] || '') },
+    { name: '국내 시세 · 네이버 증권 (삼성전자)', url: 'https://m.stock.naver.com/api/stock/005930/basic', ok: (t) => /closePrice/.test(t) },
+  ];
+
+  function netCheckSheet() {
+    openSheet(`<h2>시세 조회 점검</h2>
+      <p class="sub">이 기기의 인터넷에서 무료 시세 서비스에 접속되는지 확인합니다. 내 데이터는 전송하지 않고 공개 주소를 조회만 합니다.</p>
+      <ul class="h-list">${NET_TESTS.map((t, i) => `<li class="h-row"><div class="h-name">${esc(t.name)}</div><div class="h-act" id="net-${i}">확인 중…</div></li>`).join('')}</ul>
+      <p class="hint">✕ 실패는 인터넷 연결이 없거나, 회사·학교 네트워크가 막았거나, 해당 서비스가 브라우저 접속을 허용하지 않는 경우입니다. 이 화면을 캡처해서 알려주시면 다음 개발에 사용합니다.</p>
+      <div class="sheet-actions"><button class="btn" data-act="close-sheet">닫기</button><button class="btn primary" data-act="net-check">다시 점검</button></div>`);
+    NET_TESTS.forEach(async (t, i) => {
+      let msg;
+      try {
+        const res = await timedFetch(t.url);
+        const text = await res.text();
+        msg = res.ok && t.ok(text) ? `✓ 성공 (${text.length.toLocaleString('ko-KR')}자)` : res.ok ? '✕ 응답은 왔지만 형식이 다름' : `✕ 서버 오류 (HTTP ${res.status})`;
+      } catch (e) {
+        msg = '✕ 접속 실패 (차단 또는 연결 없음)';
+      }
+      const el = document.getElementById('net-' + i);
+      if (el) el.textContent = msg;
+    });
+  }
+  /* ================= 백업·복원 ================= */
+  async function exportData() {
+    S.settings.lastBackup = new Date().toISOString();
+    syncShared();
+    flush();
+    const text = JSON.stringify({ ...ROOT, exportedAt: new Date().toISOString() }, null, 2);
+    return saveFile(text, `리밸런서-백업-${todayStr().replace(/-/g, '')}.json`);
+  }
+  async function saveFile(text, name) {
+    try {
+      const file = new File([text], name, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); toast('백업을 저장했어요'); render(); return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; /* 취소 외 오류는 다운로드로 대체 */ }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast('백업 파일을 저장했어요');
+    render();
+  }
+  function importData(file) {
+    const rd = new FileReader();
+    rd.onload = () => {
+      let obj = null;
+      try { obj = JSON.parse(String(rd.result)); } catch (e) { /* 아래에서 처리 */ }
+      const n = Core.normalizeRoot(obj);
+      if (!n) return toast('올바른 백업 파일이 아닙니다');
+      const legacy = !(obj && Array.isArray(obj.accounts));
+      const cnt = n.accounts.map((a) => `${esc(a.name)}: 종목 ${a.state.holdings.length}개`).join('<br>');
+      confirmSheet({ title: '백업 불러오기', msg: `${cnt}<br>${legacy ? '계좌 도입 전 형식의 파일이라 전부 첫 번째 계좌(개인연금)로 들어가고 IRP는 비워집니다.<br>' : ''}<b>현재 두 계좌의 데이터가 모두 이 내용으로 교체됩니다.</b>`, ok: '교체', danger: true,
+        onOk() { undoSnap = JSON.stringify(ROOT); restoreRoot(n); closeSheet(); commit(); toast('불러왔어요', '되돌리기'); } });
+    };
+    rd.onerror = () => toast('파일을 읽지 못했어요');
+    rd.readAsText(file);
+  }
+
+  /* ================= 이벤트 ================= */
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (t.classList && t.classList.contains('backdrop')) return closeSheet();
+
+    const tab = t.closest('[data-tab]');
+    if (tab) { ui.tab = tab.dataset.tab; ui.scope = ''; render(); window.scrollTo(0, 0); return; }
+
+    const el = t.closest('[data-act]');
+    if (!el) {
+      const tipEl2 = t.closest('[data-tip]');
+      if (tipEl2) { if (!tipEl.hidden && tipEl2._shown) { hideTip(); tipEl2._shown = false; } else { showTip(tipEl2); tipEl2._shown = true; } } else hideTip();
+      return;
+    }
+    hideTip();
+    const id = el.dataset.id;
+    switch (el.dataset.act) {
+      case 'open-settings': settingsSheet(); break;
+      case 'acct': { const a = find(ROOT.accounts, id); if (a) { ROOT.activeId = a.id; S = a.state; ui.scope = ''; save(); render(); window.scrollTo(0, 0); } break; }
+      case 'acct-all': ui.scope = 'all'; render(); window.scrollTo(0, 0); break;
+      case 'close-sheet': closeSheet(); break;
+      case 'confirm-ok': { const f = pendingOk; pendingOk = null; if (f) f(); break; }
+      case 'add-holding': holdingSheet(); break;
+      case 'edit-holding': holdingSheet(id); break;
+      case 'save-holding': saveHolding(id); break;
+      case 'del-holding': {
+        const h = find(S.holdings, id);
+        confirmSheet({ title: '종목 삭제', msg: `'${esc(h.name)}'을(를) 삭제할까요?`, ok: '삭제', danger: true,
+          onOk() { undoSnap = JSON.stringify(ROOT); S.holdings = S.holdings.filter((x) => x.id !== id); closeSheet(); commit(); toast('삭제했어요', '되돌리기'); } });
+        break;
+      }
+      case 'add-group': groupSheet(); break;
+      case 'edit-group': groupSheet(id); break;
+      case 'save-group': saveGroup(id); break;
+      case 'del-group': {
+        const g = find(S.groups, id);
+        const cnt = S.holdings.filter((h) => h.groupId === id).length;
+        if (cnt) { $('#g-err').textContent = `종목 ${cnt}개가 속해 있어 삭제할 수 없습니다. 종목을 다른 자산군으로 옮기거나 삭제하세요.`; break; }
+        confirmSheet({ title: '자산군 삭제', msg: `'${esc(g.name)}' 자산군을 삭제할까요?`, ok: '삭제', danger: true,
+          onOk() { undoSnap = JSON.stringify(ROOT); S.groups = S.groups.filter((x) => x.id !== id); closeSheet(); commit(); toast('삭제했어요', '되돌리기'); } });
+        break;
+      }
+      case 'apply': {
+        const r = Core.computeRebalance(S);
+        if (r.blocking) return toast('경고를 먼저 해결해 주세요');
+        const buys = r.rows.filter((x) => x.tradeQty > 0).length, sells = r.rows.filter((x) => x.tradeQty < 0).length;
+        confirmSheet({ title: '보유 현황에 반영', msg: `매수 ${buys}종목(${won(r.buyTotal)}), 매도 ${sells}종목(${won(r.sellTotal)})을 실제로 체결했다고 보고 수량·평단가(현재가 매수 가정)·현금을 갱신합니다.<br>매매 후 현금: <b>${won(r.cashAfter)}</b>`, ok: '반영',
+          onOk() { undoSnap = JSON.stringify(ROOT); replaceActive(Core.applyRebalance(S, r)); closeSheet(); commit(); toast('보유 현황에 반영했어요', '되돌리기'); } });
+        break;
+      }
+      case 'undo':
+        if (undoSnap) { const n = Core.normalizeRoot(JSON.parse(undoSnap)); if (n) { restoreRoot(n); commit(); } undoSnap = null; toastEl.hidden = true; }
+        break;
+      case 'start-sample': replaceActive(Core.sampleState()); commit(); break;
+      case 'start-empty': ui.tab = 'holdings'; render(); holdingSheet(); break;
+      case 'fetch-fx': fetchFx(); break;
+      case 'net-check': netCheckSheet(); break;
+      case 'export': exportData(); break;
+      case 'export-old': saveFile(legacyBackup(), `리밸런서-계좌도입전-원본-${todayStr().replace(/-/g, '')}.json`); break;
+      case 'import': $('#file-in').value = ''; $('#file-in').click(); break;
+      case 'sample':
+        confirmSheet({ title: '예시 데이터', msg: `'${esc(activeAcc().name)}' 계좌의 데이터가 예시 데이터로 교체됩니다.`, ok: '교체', danger: true,
+          onOk() { undoSnap = JSON.stringify(ROOT); replaceActive(Core.sampleState()); closeSheet(); commit(); toast('예시 데이터를 불러왔어요', '되돌리기'); } });
+        break;
+      case 'reset':
+        confirmSheet({ title: '모든 데이터 삭제', msg: '개인연금·IRP 두 계좌의 종목, 목표비중이 모두 지워집니다. 먼저 백업 파일을 저장해 두는 것을 권장합니다.', ok: '모두 삭제', danger: true,
+          onOk() { undoSnap = JSON.stringify(ROOT); restoreRoot(Core.defaultRoot()); closeSheet(); commit(); toast('초기화했어요', '되돌리기'); } });
+        break;
+    }
+  });
+
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.id === 'file-in') { if (t.files && t.files[0]) importData(t.files[0]); return; }
+    const b = t.dataset && t.dataset.bind;
+    if (!b) return;
+    const id = t.dataset.id;
+    const v = t.type === 'checkbox' ? t.checked : Math.max(0, pn(t.value));
+    switch (b) {
+      case 'extra': S.settings.extraCash = v; break;
+      case 'fx': S.settings.fxRate = v; S.settings.fxUpdated = ''; syncShared(); break;
+      case 'cash': S.cash = v; break;
+      case 'tol': S.settings.tolerance = v; break;
+      case 'skip': S.settings.skipWithinBand = v; break;
+      case 'risklimit': S.settings.riskLimit = Math.min(100, v); break;
+      case 'acctname': { const a = find(ROOT.accounts, id); const nm = t.value.trim().slice(0, 20); if (a && nm) a.name = nm; else if (a) t.value = a.name; break; }
+      case 'price': { const h = find(S.holdings, id); if (h) h.price = v; break; }
+      case 'gtarget': { const g = find(S.groups, id); if (g) g.target = Math.min(100, v); break; }
+      case 'htarget': { const h = find(S.holdings, id); if (h) h.targetInGroup = Math.min(100, v); break; }
+    }
+    save();
+    scheduleRender(); // 입력 직후 탭한 버튼의 클릭이 사라지지 않도록 살짝 늦춰서 다시 그린다
+  });
+
+  document.addEventListener('focusin', (e) => {
+    const t = e.target;
+    if (t.matches && t.matches('input[inputmode="decimal"]')) { try { t.select(); } catch (err) { /* 일부 브라우저는 select 미지원 */ } }
+  });
+  document.addEventListener('pointerover', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const el = e.target.closest && e.target.closest('[data-tip]');
+    if (el) showTip(el);
+  });
+  document.addEventListener('pointerout', (e) => { if (e.pointerType === 'mouse' && e.target.closest && e.target.closest('[data-tip]')) hideTip(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { hideTip(); if (sheetRoot.firstChild) closeSheet(); } });
+  document.addEventListener('toggle', (e) => { if (e.target.id === 'tbl-det') ui.tableOpen = e.target.open; }, true);
+  window.addEventListener('scroll', hideTip, { passive: true });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+  window.addEventListener('pagehide', flush);
+
+  /* ================= 시작 ================= */
+  load().then(() => {
+    render();
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* 지원하지 않는 브라우저 */ }
+  });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+
+</script>
+</body>
+</html>
